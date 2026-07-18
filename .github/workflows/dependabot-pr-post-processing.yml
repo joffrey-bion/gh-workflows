@@ -6,16 +6,27 @@ name: dependabot-pr-post-processing
 on:
   workflow_call:
     inputs:
-      internal-dependency-groups:
+      internal-dependencies:
         description: |
-          A list of Dependabot dependency groups that are internal.
-          Internal dependencies get the `internal` label and are auto-merged.
-          The list should be provided as a multiline string, one group per line.
+          A list of individual dependencies that should be considered internal (not relevant to users).
+          A PR is considered internal if ALL of its dependencies are in this list (even
+          when its dependency group doesn't match one of `internal-dependency-groups`).
+          Internal PRs get the `internal` label and are auto-merged.
+          The list should be provided as a multiline string, one dependency name per line in the Dependabot format
+          (`group:artifact` for Gradle dependencies, `pluginId` for Gradle plugins).
         required: false
         type: string
-        default: |
-          infra-gradle
-          test-dependencies
+        default: ''
+      internal-dependency-groups:
+        description: |
+          A list of Dependabot dependency groups that should be considered internal (not relevant to users).
+          A PR is considered internal if its dependency group matches one of these groups, even if some of the 
+          updated dependencies are not in 'internal-dependencies', so you don't have to list dependencies from groups.
+          Internal PRs get the `internal` label and are auto-merged.
+          The list should be provided as a multiline string, one group name per line.
+        required: false
+        type: string
+        default: ''
       update-kotlin-lock-files:
         description: Whether to update Kotlin/JS and Kotlin/Wasm lock files when updating Kotlin-related dependencies.
         required: false
@@ -55,13 +66,17 @@ jobs:
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
 
-      - name: Check whether the dependency group is internal
+      - name: Check whether the PR is internal
         id: internal-check
         env:
           DEPENDENCY_GROUP: ${{ steps.metadata.outputs.dependency-group }}
-          INTERNAL_GROUPS: ${{ inputs.internal-deps-groups }}
+          DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
+          INTERNAL_GROUPS: ${{ inputs.internal-dependency-groups }}
+          INTERNAL_DEPS: ${{ inputs.internal-dependencies }}
         run: |
           is_internal=false
+
+          # 1. The PR is internal if its dependency group matches one of the internal groups.
           if [[ -n "$DEPENDENCY_GROUP" ]]; then
             while IFS= read -r group; do
               group="$(echo "$group" | xargs)" # trim surrounding whitespace
@@ -71,7 +86,54 @@ jobs:
               fi
             done <<< "$INTERNAL_GROUPS"
           fi
+
+          # 2. Otherwise, the PR is internal if ALL its dependencies are internal.
+          #    Any dependency that is not internal is "user-visible" and prevents auto-merge.
+          external_deps=""
+          if [[ "$is_internal" != "true" ]]; then
+            dep_count=0
+            IFS=',' read -ra deps <<< "$DEPENDENCY_NAMES"
+            for dep in "${deps[@]}"; do
+              dep="$(echo "$dep" | xargs)" # trim surrounding whitespace
+              [[ -z "$dep" ]] && continue
+              dep_count=$((dep_count + 1))
+
+              found=false
+              while IFS= read -r internal_dep; do
+                internal_dep="$(echo "$internal_dep" | xargs)" # trim surrounding whitespace
+                if [[ -n "$internal_dep" && "$internal_dep" == "$dep" ]]; then
+                  found=true
+                  break
+                fi
+              done <<< "$INTERNAL_DEPS"
+
+              if [[ "$found" != "true" ]]; then
+                external_deps+="${dep}"$'\n'
+              fi
+            done
+
+            # Only mark as internal-by-dependencies if there was at least one dependency
+            # and none of them were user-visible.
+            if [[ "$dep_count" -gt 0 && -z "$external_deps" ]]; then
+              is_internal=true
+            fi
+          fi
+
           echo "is-internal=$is_internal" >> "$GITHUB_OUTPUT"
+
+          if [[ "$is_internal" != "true" && -n "$external_deps" ]]; then
+            echo "This PR is not considered internal because the following user-visible dependencies are not in the internal dependencies list:"
+            echo "$external_deps"
+            {
+              echo "### PR not marked as internal"
+              echo ""
+              echo "The dependency group did not match, and the following user-visible dependencies are not in the internal dependencies list:"
+              echo ""
+              while IFS= read -r d; do
+                [[ -n "$d" ]] && echo "- \`$d\`"
+              done <<< "$external_deps"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
 
   internal-deps:
     needs: metadata
