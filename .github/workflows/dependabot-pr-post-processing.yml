@@ -66,7 +66,7 @@ jobs:
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
 
-      - name: Check whether the PR is internal
+      - name: Determine whether the PR is internal
         id: internal-check
         env:
           DEPENDENCY_GROUP: ${{ steps.metadata.outputs.dependency-group }}
@@ -134,6 +134,10 @@ jobs:
               done <<< "$external_deps"
             } >> "$GITHUB_STEP_SUMMARY"
           fi
+
+          # A non-internal PR is a normal outcome, not a failure. Ensure the step exits
+          # successfully regardless of the exit code of the last command above.
+          exit 0
 
   internal-deps:
     needs: metadata
