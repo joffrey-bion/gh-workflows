@@ -172,7 +172,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.ref }}
           # Use the passed-in token so the push has write access AND re-triggers CI
           # (a push made with the default GITHUB_TOKEN does not trigger other workflows)
-          token: ${{ secrets.token }}
+          token: ${{ secrets.github-token }}
 
       - name: Set up JDK ${{ inputs.gradle-jdk-version }}
         uses: actions/setup-java@v5
