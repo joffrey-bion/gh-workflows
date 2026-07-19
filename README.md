@@ -28,7 +28,14 @@ jobs:
   dependabot-pr-post-processing:
     uses: joffrey-bion/gh-workflows/.github/workflows/dependabot-pr-post-processing.yml@main
     with:
-      internal-dependency-groups: infra-gradle
+      internal-dependencies: |
+        gradle-wrapper
+        com.gradle.develocity
+        com.vanniktech.maven.publish
+        org.hildan.github.changelog
+        org.jetbrains.dokka
+        org.jetbrains.kotlinx.binary-compatibility-validator
+        ru.vyarus.github-info
     secrets:
       github-token: ${{ github.token }} # Use a PAT instead to trigger other CI workflows
 ```
@@ -53,17 +60,4 @@ updates:
       interval: "daily"
     labels:
       - dependencies
-    groups:
-      # Gradle plugins that don't have user visible consequences and
-      # thus shouldn't appear in the changelog (mark as 'internal')
-      infra-gradle-plugins:
-        # Using quotes when starting with '*', otherwise YAML interprets them as YAML aliases
-        patterns:
-          - 'gradle-wrapper'
-          - 'com.gradle.develocity'
-          - 'com.vanniktech.maven.publish*'
-          - 'org.hildan.github.changelog*'
-          - 'org.jetbrains.dokka*'
-          - 'org.jetbrains.kotlinx.binary-compatibility-validator*'
-          - 'ru.vyarus.github-info*'
 ```
