@@ -14,6 +14,8 @@ on:
           Internal PRs get the `internal` label and are auto-merged.
           The list should be provided as a multiline string, one dependency name per line in the Dependabot format
           (`group:artifact` for Gradle dependencies, `pluginId` for Gradle plugins).
+          Entries may use glob patterns (`*`, `?`, `[...]`) to match multiple dependencies at once, for example
+          `org.jetbrains.kotlin:*` to match all artifacts in the `org.jetbrains.kotlin` group.
         required: false
         type: string
         default: ''
@@ -101,7 +103,9 @@ jobs:
               found=false
               while IFS= read -r internal_dep; do
                 internal_dep="$(echo "$internal_dep" | xargs)" # trim surrounding whitespace
-                if [[ -n "$internal_dep" && "$internal_dep" == "$dep" ]]; then
+                # The right-hand side is left unquoted on purpose so that entries can use
+                # glob patterns (e.g. 'org.jetbrains.kotlin:*') to match multiple dependencies.
+                if [[ -n "$internal_dep" && "$dep" == $internal_dep ]]; then
                   found=true
                   break
                 fi
