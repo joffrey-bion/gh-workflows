@@ -146,7 +146,7 @@ jobs:
     steps:
       - name: Add the 'internal' label and enable auto-merge for internal deps
         env:
-          GH_TOKEN: ${{ secrets.token }}
+          GH_TOKEN: ${{ secrets.github-token }}
           PR_URL: ${{ github.event.pull_request.html_url }}
         run: |
           gh pr edit "$PR_URL" --add-label "internal"
