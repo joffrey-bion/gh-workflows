@@ -6,7 +6,7 @@ A collection of reusable GitHub workflows.
 
 This workflow performs some extra operations on Dependabot PRs:
 
-* it adds the `internal` label to PRs for the selected dependency group(s)
+* it adds the `internal` label to PRs for the selected dependencies (or a custom label name)
 * it enables auto-merge for these same PRs
 * it updates the `kotlin-js-store/yarn.lock` and `kotlin-js-store/wasm/yarn.lock` files in PRs that update 
   Kotlin-related dependencies
@@ -37,7 +37,7 @@ jobs:
         org.jetbrains.kotlinx.binary-compatibility-validator
         ru.vyarus.github-info
     secrets:
-      github-token: ${{ github.token }} # Use a PAT instead to trigger other CI workflows
+      github-token: ${{ secrets.GH_PAT }}
 ```
 
 With a `dependabot.yml` setup like this:
