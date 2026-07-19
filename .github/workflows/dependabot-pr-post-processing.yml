@@ -68,6 +68,28 @@ jobs:
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
 
+      - name: List dependencies
+        env:
+          DEPENDENCY_GROUP: ${{ steps.metadata.outputs.dependency-group }}
+          DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
+        run: |
+          echo "Dependency group: $DEPENDENCY_GROUP"
+          echo "Dependency names: $DEPENDENCY_NAMES"
+          {
+            echo "### Dependabot metadata for this PR"
+            echo ""
+            echo "Dependency group: \`$DEPENDENCY_GROUP\`"
+            echo ""
+            echo "Dependency names:"
+            echo ""
+            # DEPENDENCY_NAMES is a comma-separated list (see fetch-metadata output).
+            IFS=',' read -ra names <<< "$DEPENDENCY_NAMES"
+            for d in "${names[@]}"; do
+              d="$(echo "$d" | xargs)" # trim surrounding whitespace
+              [[ -n "$d" ]] && echo "- \`$d\`"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Determine whether the PR is internal
         id: internal-check
         env:
@@ -169,10 +191,6 @@ jobs:
     if: inputs.update-kotlin-lock-files && contains(needs.metadata.outputs.dependency-names, 'kotlin')
     runs-on: ubuntu-latest
     steps:
-      - name: List dependencies
-        run: |
-          echo "Dependencies that triggered this job: ${{ needs.metadata.outputs.dependency-names }}"
-
       - name: Checkout PR branch
         uses: actions/checkout@v7
         with:
