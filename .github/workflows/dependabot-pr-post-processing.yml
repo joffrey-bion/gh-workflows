@@ -11,7 +11,7 @@ on:
           A list of individual dependencies that should be considered internal (not relevant to users).
           A PR is considered internal if ALL of its dependencies are in this list (even
           when its dependency group doesn't match one of `internal-dependency-groups`).
-          Internal PRs get the `internal` label and are auto-merged.
+          Internal PRs get the label defined by `internal-label` and are auto-merged.
           The list should be provided as a multiline string, one dependency name per line in the Dependabot format
           (`group:artifact` for Gradle dependencies, `pluginId` for Gradle plugins).
           Entries may use glob patterns (`*`, `?`, `[...]`) to match multiple dependencies at once, for example
@@ -24,11 +24,18 @@ on:
           A list of Dependabot dependency groups that should be considered internal (not relevant to users).
           A PR is considered internal if its dependency group matches one of these groups, even if some of the 
           updated dependencies are not in 'internal-dependencies', so you don't have to list dependencies from groups.
-          Internal PRs get the `internal` label and are auto-merged.
+          Internal PRs get the label defined by `internal-label` and are auto-merged.
           The list should be provided as a multiline string, one group name per line.
         required: false
         type: string
         default: ''
+      internal-label:
+        description: |
+          The name of the label to apply to internal PRs. The label is created automatically if it
+          doesn't already exist in the repository.
+        type: string
+        required: false
+        default: internal
       update-kotlin-lock-files:
         description: Whether to update Kotlin/JS and Kotlin/Wasm lock files when updating Kotlin-related dependencies.
         required: false
@@ -64,7 +71,7 @@ jobs:
     steps:
       - name: Dependabot metadata
         id: metadata
-        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98
+        uses: dependabot/fetch-metadata@v3
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
 
@@ -170,12 +177,19 @@ jobs:
     if: needs.metadata.outputs.is-internal == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Add the 'internal' label and enable auto-merge for internal deps
+      - name: Add the internal label and enable auto-merge for internal deps
         env:
           GH_TOKEN: ${{ secrets.github-token }}
+          GH_REPO: ${{ github.repository }}
           PR_URL: ${{ github.event.pull_request.html_url }}
+          LABEL: ${{ inputs.internal-label }}
         run: |
-          gh pr edit "$PR_URL" --add-label "internal"
+          # Create the label if it doesn't already exist. We check explicitly (rather than
+          # swallowing a "label already exists" error) so genuine failures still surface.
+          if ! gh label list --search "$LABEL" --json name --jq '.[].name' | grep -qxF "$LABEL"; then
+            gh label create "$LABEL" --description "Issues and PRs that shouldn't appear in the change log"
+          fi
+          gh pr edit "$PR_URL" --add-label "$LABEL"
           gh pr merge "$PR_URL" --auto --rebase
 
   update-locks:
