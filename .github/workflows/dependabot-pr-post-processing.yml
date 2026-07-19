@@ -199,10 +199,17 @@ jobs:
     #   org.jetbrains.kotlin.multiplatform
     #   org.jetbrains.kotlin.plugin.serialization
     #   org.jetbrains.kotlin:kotlinx-atomicfu-runtime
+    #   multiplatform - when used with the shortcut kotlin("mutliplatform")
+    #   plugin.serialization - when used with the shortcut kotlin("plugin.serialization")
     #   io.ktor:ktor-kotlinx-serialization-json
     # It's ok to trigger on more dependencies than we want, it just will not result in any
     # lock file changes, and be a no-op.
-    if: inputs.update-kotlin-lock-files && contains(needs.metadata.outputs.dependency-names, 'kotlin')
+    if: >-
+      inputs.update-kotlin-lock-files && (
+        contains(needs.metadata.outputs.dependency-names, 'kotlin') ||
+        contains(needs.metadata.outputs.dependency-names, 'multiplatform') ||
+        contains(needs.metadata.outputs.dependency-names, 'plugin.serialization')
+      )
     runs-on: ubuntu-latest
     steps:
       - name: Checkout PR branch
