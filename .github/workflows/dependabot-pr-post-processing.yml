@@ -228,7 +228,7 @@ jobs:
           java-version: ${{ inputs.gradle-jdk-version }}
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@v6.2.0
 
       - name: Update Yarn lock files for Kotlin/JS and Kotlin/Wasm
         run: ${{ inputs.update-kotlin-lock-files-command }}
