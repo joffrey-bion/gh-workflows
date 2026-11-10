@@ -20,9 +20,10 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+# We don't need any permissions here, because they are handled in the PAT.
+# We need the PAT because Dependabot workflows don't have enough permissions to process the PRs properly.
 permissions:
-  contents: write # to commit yarn.lock files
-  pull-requests: write # to label PRs
+  contents: none
 
 jobs:
   dependabot-pr-post-processing:
@@ -37,7 +38,11 @@ jobs:
         org.jetbrains.kotlinx.binary-compatibility-validator
         ru.vyarus.github-info
     secrets:
-      github-token: ${{ secrets.GH_PAT }}
+      # Needs:
+      #   contents:write to commit yarn.lock files
+      #   pull-requests:write to label PRs
+      #   issues:write to create the label if missing
+      github-token: ${{ secrets.GH_PAT_FOR_DEPENDABOT }}
 ```
 
 With a `dependabot.yml` setup like this:
