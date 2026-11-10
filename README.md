@@ -10,6 +10,9 @@ This workflow performs some extra operations on Dependabot PRs:
 * it enables auto-merge for these same PRs
 * it updates the `kotlin-js-store/yarn.lock` and `kotlin-js-store/wasm/yarn.lock` files in PRs that update 
   Kotlin-related dependencies
+* it re-normalizes the line endings of `gradlew.bat` in PRs that update the Gradle wrapper (Dependabot commits
+  that file with CRLF line endings, ignoring the normalization defined by `.gitattributes`, see
+  https://github.com/dependabot/dependabot-core/issues/10193)
 
 Typical setup:
 
