@@ -122,9 +122,9 @@ jobs:
         run: |
           is_internal=false
 
-          # 1. The PR is internal if the internal label is already present on it
-          #    (e.g. applied by the Dependabot config, or manually).
-          if gh pr view "$PR_URL" --json labels --jq '.[].name' | grep -qxF "$INTERNAL_LABEL"; then
+          # 1. The PR is internal if the internal label is already present on it (e.g. applied by the Dependabot config).
+          pr_label_names="$(gh pr view "$PR_URL" --json labels --jq '.labels[].name')"
+          if grep -qxF "$INTERNAL_LABEL" <<< "$pr_label_names"; then
             is_internal=true
           fi
 
@@ -296,10 +296,12 @@ jobs:
           LABEL: ${{ inputs.internal-label }}
         run: |
           # The label may already be on the PR (e.g. applied by the Dependabot config, or manually).
-          if ! gh pr view "$PR_URL" --json labels --jq '.[].name' | grep -qxF "$LABEL"; then
+          pr_label_names="$(gh pr view "$PR_URL" --json labels --jq '.labels[].name')"
+          if ! grep -qxF "$LABEL" <<< "$pr_label_names"; then
             # Create the label if it doesn't already exist in the repository. We check explicitly
             # (rather than swallowing a "label already exists" error) so genuine failures still surface.
-            if ! gh label list --search "$LABEL" --json name --jq '.[].name' | grep -qxF "$LABEL"; then
+            label_names="$(gh label list --search "$LABEL" --json name --jq '.[].name')"
+            if ! grep -qxF "$LABEL" <<< "$label_names"; then
               gh label create "$LABEL" --description "Issues and PRs that shouldn't appear in the change log"
             fi
             gh pr edit "$PR_URL" --add-label "$LABEL"
