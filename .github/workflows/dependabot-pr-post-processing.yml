@@ -31,8 +31,10 @@ on:
         default: ''
       internal-label:
         description: |
-          The name of the label to apply to internal PRs. The label is created automatically if it
-          doesn't already exist in the repository.
+          The name of the label that marks PRs as internal. The label is created automatically if it doesn't already 
+          exist in the repository. PRs that already have this label (e.g. applied by the Dependabot config, or manually)
+          are considered internal. PRs with dependencies matching `internal-dependencies` or groups matching 
+          `internal-dependency-groups` are considered internal and marked with this label. Internal PRs are auto-merged.
         type: string
         required: false
         default: internal
@@ -109,15 +111,25 @@ jobs:
       - name: Determine whether the PR is internal
         id: internal-check
         env:
+          GH_TOKEN: ${{ secrets.github-token }}
+          GH_REPO: ${{ github.repository }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
           DEPENDENCY_GROUP: ${{ steps.metadata.outputs.dependency-group }}
           DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
           INTERNAL_GROUPS: ${{ inputs.internal-dependency-groups }}
           INTERNAL_DEPS: ${{ inputs.internal-dependencies }}
+          INTERNAL_LABEL: ${{ inputs.internal-label }}
         run: |
           is_internal=false
 
-          # 1. The PR is internal if its dependency group matches one of the internal groups.
-          if [[ -n "$DEPENDENCY_GROUP" ]]; then
+          # 1. The PR is internal if the internal label is already present on it
+          #    (e.g. applied by the Dependabot config, or manually).
+          if gh pr view "$PR_URL" --json labels --jq '.[].name' | grep -qxF "$INTERNAL_LABEL"; then
+            is_internal=true
+          fi
+
+          # 2. The PR is internal if its dependency group matches one of the internal groups.
+          if [[ "$is_internal" != "true" && -n "$DEPENDENCY_GROUP" ]]; then
             while IFS= read -r group; do
               group="$(echo "$group" | xargs)" # trim surrounding whitespace
               if [[ -n "$group" && "$group" == "$DEPENDENCY_GROUP" ]]; then
@@ -127,7 +139,7 @@ jobs:
             done <<< "$INTERNAL_GROUPS"
           fi
 
-          # 2. Otherwise, the PR is internal if ALL its dependencies are internal.
+          # 3. Otherwise, the PR is internal if ALL its dependencies are internal.
           #    Any dependency that is not internal is "user-visible" and prevents auto-merge.
           external_deps=""
           if [[ "$is_internal" != "true" ]]; then
@@ -169,7 +181,7 @@ jobs:
             {
               echo "### PR not marked as internal"
               echo ""
-              echo "The dependency group did not match, and the following user-visible dependencies are not in the internal dependencies list:"
+              echo "The internal label is not already present, the dependency group did not match, and the following user-visible dependencies are not in the internal dependencies list:"
               echo ""
               while IFS= read -r d; do
                 [[ -n "$d" ]] && echo "- \`$d\`"
@@ -276,17 +288,26 @@ jobs:
     if: needs.metadata.outputs.is-internal == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Add the internal label and enable auto-merge for internal deps
+      - name: Ensure the internal label is present
         env:
           GH_TOKEN: ${{ secrets.github-token }}
           GH_REPO: ${{ github.repository }}
           PR_URL: ${{ github.event.pull_request.html_url }}
           LABEL: ${{ inputs.internal-label }}
         run: |
-          # Create the label if it doesn't already exist. We check explicitly (rather than
-          # swallowing a "label already exists" error) so genuine failures still surface.
-          if ! gh label list --search "$LABEL" --json name --jq '.[].name' | grep -qxF "$LABEL"; then
-            gh label create "$LABEL" --description "Issues and PRs that shouldn't appear in the change log"
+          # The label may already be on the PR (e.g. applied by the Dependabot config, or manually).
+          if ! gh pr view "$PR_URL" --json labels --jq '.[].name' | grep -qxF "$LABEL"; then
+            # Create the label if it doesn't already exist in the repository. We check explicitly
+            # (rather than swallowing a "label already exists" error) so genuine failures still surface.
+            if ! gh label list --search "$LABEL" --json name --jq '.[].name' | grep -qxF "$LABEL"; then
+              gh label create "$LABEL" --description "Issues and PRs that shouldn't appear in the change log"
+            fi
+            gh pr edit "$PR_URL" --add-label "$LABEL"
           fi
-          gh pr edit "$PR_URL" --add-label "$LABEL"
-          gh pr merge "$PR_URL" --auto --rebase
+
+      - name: Enable auto-merge
+        env:
+          GH_TOKEN: ${{ secrets.github-token }}
+          GH_REPO: ${{ github.repository }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr merge "$PR_URL" --auto --rebase
