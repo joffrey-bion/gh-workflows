@@ -38,6 +38,13 @@ on:
         type: string
         required: false
         default: internal
+      auto-merge-internal-prs:
+        description: |
+          Whether to auto-merge PRs that are marked as internal. The "Allow auto-merge" setting must be ticked, and 
+          at least one check should be present.
+        required: false
+        type: boolean
+        default: true
       update-kotlin-lock-files:
         description: Whether to update Kotlin/JS and Kotlin/Wasm lock files when updating Kotlin-related dependencies.
         required: false
@@ -348,6 +355,7 @@ jobs:
           fi
 
       - name: Enable auto-merge
+        if: inputs.auto-merge-internal-prs
         env:
           GH_TOKEN: ${{ secrets.github-token }}
           GH_REPO: ${{ github.repository }}
