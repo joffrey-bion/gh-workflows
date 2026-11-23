@@ -358,9 +358,14 @@ jobs:
   enable-auto-merge:
     # We make sure that changes to the branch are done before activating auto-merge
     needs: [metadata, renormalize-gradlew-bat, update-locks]
+    # We just want to wait for the jobs that make commits, but we still want to run if they're skipped
+    # See https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#example-not-requiring-successful-dependent-jobs
     if: >-
-      inputs.auto-merge == 'all' ||
-      (inputs.auto-merge == 'internal-only' && needs.metadata.outputs.is-internal == 'true')
+      !cancelled() && 
+      needs.metadata.result == 'success' && 
+      needs.renormalize-gradlew-bat.result != 'failure' && 
+      needs.update-locks.result != 'failure' && 
+      (inputs.auto-merge == 'all' || (inputs.auto-merge == 'internal-only' && needs.metadata.outputs.is-internal == 'true'))
     runs-on: ubuntu-latest
     steps:
       - name: Enable auto-merge
