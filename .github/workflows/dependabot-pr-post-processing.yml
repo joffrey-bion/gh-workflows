@@ -1,17 +1,24 @@
 name: dependabot-pr-post-processing
 
-# Requirements:
-#   * "Allow auto-merge" setting must be ticked, and at least one check should be present
-
 on:
   workflow_call:
     inputs:
+      auto-merge:
+        description: |
+          Whether to enable auto-merge on Dependabot PRs, and for which ones:
+          * `disabled`: never enable auto-merge.
+          * `internal-only`: only enable auto-merge on PRs considered internal.
+          * `all`: enable auto-merge on all Dependabot PRs.
+          The "Allow auto-merge" setting must be ticked, and at least one check should be present.
+        required: false
+        type: string
+        default: internal-only
       internal-dependencies:
         description: |
           A list of individual dependencies that should be considered internal (not relevant to users).
           A PR is considered internal if ALL of its dependencies are in this list (even
           when its dependency group doesn't match one of `internal-dependency-groups`).
-          Internal PRs get the label defined by `internal-label` and are auto-merged.
+          Internal PRs get the label defined by `internal-label` and are auto-merged (see the `auto-merge` input).
           The list should be provided as a multiline string, one dependency name per line in the Dependabot format
           (`group:artifact` for Gradle dependencies, `pluginId` for Gradle plugins).
           Entries may use glob patterns (`*`, `?`, `[...]`) to match multiple dependencies at once, for example
@@ -24,7 +31,7 @@ on:
           A list of Dependabot dependency groups that should be considered internal (not relevant to users).
           A PR is considered internal if its dependency group matches one of these groups, even if some of the 
           updated dependencies are not in 'internal-dependencies', so you don't have to list dependencies from groups.
-          Internal PRs get the label defined by `internal-label` and are auto-merged.
+          Internal PRs get the label defined by `internal-label` and are auto-merged (see the `auto-merge` input).
           The list should be provided as a multiline string, one group name per line.
         required: false
         type: string
@@ -34,17 +41,11 @@ on:
           The name of the label that marks PRs as internal. The label is created automatically if it doesn't already 
           exist in the repository. PRs that already have this label (e.g. applied by the Dependabot config, or manually)
           are considered internal. PRs with dependencies matching `internal-dependencies` or groups matching 
-          `internal-dependency-groups` are considered internal and marked with this label. Internal PRs are auto-merged.
+          `internal-dependency-groups` are considered internal and marked with this label. Internal PRs are auto-merged
+          depending on the `auto-merge` input.
         type: string
         required: false
         default: internal
-      auto-merge-internal-prs:
-        description: |
-          Whether to auto-merge PRs that are marked as internal. The "Allow auto-merge" setting must be ticked, and 
-          at least one check should be present.
-        required: false
-        type: boolean
-        default: true
       update-kotlin-lock-files:
         description: Whether to update Kotlin/JS and Kotlin/Wasm lock files when updating Kotlin-related dependencies.
         required: false
@@ -329,9 +330,8 @@ jobs:
             git push
           fi
 
-  internal-deps:
-    # We make sure that changes to the branch are done before activating auto-merge
-    needs: [metadata, renormalize-gradlew-bat, update-locks]
+  label-internal:
+    needs: metadata
     if: needs.metadata.outputs.is-internal == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -354,8 +354,15 @@ jobs:
             gh pr edit "$PR_URL" --add-label "$LABEL"
           fi
 
+  enable-auto-merge:
+    # We make sure that changes to the branch are done before activating auto-merge
+    needs: [metadata, renormalize-gradlew-bat, update-locks]
+    if: >-
+      inputs.auto-merge == 'all' ||
+      (inputs.auto-merge == 'internal-only' && needs.metadata.outputs.is-internal == 'true')
+    runs-on: ubuntu-latest
+    steps:
       - name: Enable auto-merge
-        if: inputs.auto-merge-internal-prs
         env:
           GH_TOKEN: ${{ secrets.github-token }}
           GH_REPO: ${{ github.repository }}

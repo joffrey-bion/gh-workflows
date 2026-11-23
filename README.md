@@ -7,7 +7,8 @@ A collection of reusable GitHub workflows.
 This workflow performs some extra operations on Dependabot PRs:
 
 * it adds the `internal` label to PRs for the selected dependencies (or a custom label name)
-* it enables auto-merge for these same PRs, or PRs that were already labeled `internal` (e.g. by Dependabot's own config)
+* it enables auto-merge on internal PRs, or on all Dependabot PRs, depending on the `auto-merge` input
+  (`internal-only` by default, `all`, or `disabled`)
 * it updates the `kotlin-js-store/yarn.lock` and `kotlin-js-store/wasm/yarn.lock` files in PRs that update 
   Kotlin-related dependencies
 * it re-normalizes the line endings of `gradlew.bat` in PRs that update the Gradle wrapper (Dependabot commits
