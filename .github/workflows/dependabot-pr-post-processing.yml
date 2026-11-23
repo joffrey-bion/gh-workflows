@@ -9,7 +9,8 @@ on:
           * `disabled`: never enable auto-merge.
           * `internal-only`: only enable auto-merge on PRs considered internal.
           * `all`: enable auto-merge on all Dependabot PRs.
-          The "Allow auto-merge" setting must be ticked, and at least one check should be present.
+          The "Allow auto-merge" setting (in the repo's General settings) must be ticked, and at least one check should 
+          be present (in a branch ruleset).
         required: false
         type: string
         default: internal-only
