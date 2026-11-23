@@ -96,7 +96,11 @@ jobs:
           {
             echo "### Dependabot metadata for this PR"
             echo ""
-            echo "Dependency group: \`$DEPENDENCY_GROUP\`"
+            if [[ -n ${DEPENDENCY_GROUP:-} ]]; then
+              echo "Dependency group: \`$DEPENDENCY_GROUP\`"
+            else
+              echo 'Dependency group: (none)'
+            fi
             echo ""
             echo "Dependency names:"
             echo ""
@@ -122,26 +126,53 @@ jobs:
         run: |
           is_internal=false
 
+          {
+            echo "### Internal PR detection"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
           # 1. The PR is internal if the internal label is already present on it (e.g. applied by the Dependabot config).
           pr_label_names="$(gh pr view "$PR_URL" --json labels --jq '.labels[].name')"
           if grep -qxF "$INTERNAL_LABEL" <<< "$pr_label_names"; then
+            echo "The label '$INTERNAL_LABEL' is already present on the PR. No further checks needed."
+            echo "* The label \`$INTERNAL_LABEL\` is already present on the PR" >> "$GITHUB_STEP_SUMMARY"
             is_internal=true
+          else
+            echo "The label '$INTERNAL_LABEL' is not present on the PR"
+            echo "* The label \`$INTERNAL_LABEL\` is _not_ already present on the PR" >> "$GITHUB_STEP_SUMMARY"
           fi
 
           # 2. The PR is internal if its dependency group matches one of the internal groups.
-          if [[ "$is_internal" != "true" && -n "$DEPENDENCY_GROUP" ]]; then
-            while IFS= read -r group; do
-              group="$(echo "$group" | xargs)" # trim surrounding whitespace
-              if [[ -n "$group" && "$group" == "$DEPENDENCY_GROUP" ]]; then
+          if [[ "$is_internal" != "true" ]]; then
+            if [[ -z "$DEPENDENCY_GROUP" ]]; then
+              echo "The PR doesn't belong to a dependency group"
+              echo "* The PR doesn't belong to a dependency group" >> "$GITHUB_STEP_SUMMARY"
+            else
+              group_matched=false
+              while IFS= read -r group; do
+                group="$(echo "$group" | xargs)" # trim surrounding whitespace
+                if [[ -n "$group" && "$group" == "$DEPENDENCY_GROUP" ]]; then
+                  group_matched=true
+                  break
+                fi
+              done <<< "$INTERNAL_GROUPS"
+
+              if [[ "$group_matched" == "true" ]]; then
+                echo "The dependency group '$DEPENDENCY_GROUP' is one of the internal dependency groups. Marking as internal."
+                echo "* The dependency group \`$DEPENDENCY_GROUP\` is one of the internal dependency groups" >> "$GITHUB_STEP_SUMMARY"
                 is_internal=true
-                break
+              else
+                echo "The dependency group '$DEPENDENCY_GROUP' is not one of the internal dependency groups"
+                echo "* The dependency group \`$DEPENDENCY_GROUP\` is not one of the internal dependency groups" >> "$GITHUB_STEP_SUMMARY"
               fi
-            done <<< "$INTERNAL_GROUPS"
+            fi
+          else
+            echo "* _Dependency group check was skipped_" >> "$GITHUB_STEP_SUMMARY"
           fi
 
           # 3. Otherwise, the PR is internal if ALL its dependencies are internal.
           #    Any dependency that is not internal is "user-visible" and prevents auto-merge.
-          external_deps=""
+          user_visible_deps=""
           if [[ "$is_internal" != "true" ]]; then
             dep_count=0
             IFS=',' read -ra deps <<< "$DEPENDENCY_NAMES"
@@ -162,32 +193,41 @@ jobs:
               done <<< "$INTERNAL_DEPS"
 
               if [[ "$found" != "true" ]]; then
-                external_deps+="${dep}"$'\n'
+                user_visible_deps+="${dep}"$'\n'
               fi
             done
 
             # Only mark as internal-by-dependencies if there was at least one dependency
             # and none of them were user-visible.
-            if [[ "$dep_count" -gt 0 && -z "$external_deps" ]]; then
+            if [[ "$dep_count" -gt 0 && -z "$user_visible_deps" ]]; then
+              echo "All dependencies are internal. Marking the PR as internal."
+              echo "* All dependencies from this PR are in the internal dependencies list" >> "$GITHUB_STEP_SUMMARY"
               is_internal=true
+            elif [[ "$dep_count" -eq 0 ]]; then
+              echo "The PR lists no dependencies"
+              echo "* The PR lists no dependencies. **This is considered a suspicious degenerate case that requires attention; not marking as internal**" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "The following dependencies are not in the internal dependencies list, so the PR is not considered internal:"
+              echo "$user_visible_deps"
+              echo "* The following dependencies from this PR are not in the internal dependencies list:" >> "$GITHUB_STEP_SUMMARY"
+              while IFS= read -r d; do
+                [[ -n "$d" ]] && echo "  * \`$d\`" >> "$GITHUB_STEP_SUMMARY"
+              done <<< "$user_visible_deps"
             fi
+          else
+            echo "* _Dependency list check was skipped_" >> "$GITHUB_STEP_SUMMARY"
           fi
 
           echo "is-internal=$is_internal" >> "$GITHUB_OUTPUT"
 
-          if [[ "$is_internal" != "true" && -n "$external_deps" ]]; then
-            echo "This PR is not considered internal because the following user-visible dependencies are not in the internal dependencies list:"
-            echo "$external_deps"
-            {
-              echo "### PR not marked as internal"
-              echo ""
-              echo "The internal label is not already present, the dependency group did not match, and the following user-visible dependencies are not in the internal dependencies list:"
-              echo ""
-              while IFS= read -r d; do
-                [[ -n "$d" ]] && echo "- \`$d\`"
-              done <<< "$external_deps"
-            } >> "$GITHUB_STEP_SUMMARY"
+          visibility_label="user-visible"
+          if [[ "$is_internal" == "true" ]]; then
+            visibility_label="internal"
           fi
+          {
+            echo ""
+            echo "The PR is considered **${visibility_label}**."
+          } >> "$GITHUB_STEP_SUMMARY"
 
           # A non-internal PR is a normal outcome, not a failure. Ensure the step exits
           # successfully regardless of the exit code of the last command above.
